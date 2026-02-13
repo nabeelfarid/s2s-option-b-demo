@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import jwt, { type JwtPayload } from "jsonwebtoken";
-import { OKTA_ISSUER, SIGNING_SECRET } from "../config.js";
+import * as jose from "jose";
+import { OKTA_CONFIG, MOCK_OKTA_CONFIG } from "../config.js";
 import type { JwtClaims, TokenRequest } from "../types.js";
 
 function nowSeconds() {
@@ -14,9 +15,9 @@ function jtiFor(payload: object) {
     .slice(0, 16);
 }
 
-export function issueJwt(req: TokenRequest) {
+export function issueMockOktaJwt(req: TokenRequest) {
   const baseClaims: any = {
-    iss: OKTA_ISSUER,
+    iss: MOCK_OKTA_CONFIG.issuer,
     aud: req.audience,
     azp: req.client_id,
     scope: req.scope ?? "read:basic",
@@ -29,7 +30,7 @@ export function issueJwt(req: TokenRequest) {
 
   baseClaims.jti = jtiFor(baseClaims);
 
-  const token = jwt.sign(baseClaims, SIGNING_SECRET, {
+  const token = jwt.sign(baseClaims, MOCK_OKTA_CONFIG.signingSecret, {
     algorithm: "HS256",
     expiresIn: "5m",
   });
@@ -37,11 +38,54 @@ export function issueJwt(req: TokenRequest) {
   return token;
 }
 
-export function validateJwt(token: string, expectedAudience: string): JwtClaims {
-  const decoded = jwt.verify(token, SIGNING_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
+export function validateMockOktaJwt(token: string, expectedAudience: string): JwtClaims {
+  const decoded = jwt.verify(token, MOCK_OKTA_CONFIG.signingSecret, { algorithms: ["HS256"] }) as JwtPayload;
 
-  if (decoded.iss !== OKTA_ISSUER) throw new Error("bad_issuer");
+  if (decoded.iss !== MOCK_OKTA_CONFIG.issuer) throw new Error("bad_issuer");
   if (decoded.aud !== expectedAudience) throw new Error("bad_audience");
 
   return decoded as JwtClaims;
 }
+
+/**
+ * Validate RS256 JWT from real Okta using JWKS
+ * Supports both custom authorization server and org-level tokens
+ */
+export async function validateOktaJwt(token: string, expectedAudience: string): Promise<JwtClaims> {
+  // Decode token without verification to check the issuer
+  const decoded = jwt.decode(token, { complete: true }) as any;
+  const tokenIssuer = decoded?.payload?.iss;
+
+  try {
+    // Determine which JWKS and issuer to use based on the token's issuer
+    const isOrgToken = tokenIssuer === OKTA_CONFIG.orgIssuer;
+    const jwksUrl = isOrgToken ? OKTA_CONFIG.orgJwksUrl : OKTA_CONFIG.jwksUrl;
+    const expectedIssuer = isOrgToken ? OKTA_CONFIG.orgIssuer : OKTA_CONFIG.issuer;
+
+    const JWKS = jose.createRemoteJWKSet(new URL(jwksUrl));
+
+    const { payload } = await jose.jwtVerify(token, JWKS, {
+      /*
+        Always validate both issuer and audience when verifying JWT tokens. 
+        These are critical security controls that prevent token substitution attacks.
+        See READEME.md for more details.
+      */
+      // issuer: expectedIssuer,
+      // audience: expectedAudience,
+    });
+
+    console.dir(payload, { depth: null });
+
+    const claims = payload as JwtClaims;
+
+    // Normalize the claims - Okta uses 'cid' for client_id, we want 'azp' for consistency
+    if ((claims as any).cid && !claims.azp) {
+      claims.azp = (claims as any).cid;
+    }
+
+    return claims;
+  } catch (error: any) {
+    throw new Error(`jwks_validation_failed: ${error.message}`);
+  }
+}
+

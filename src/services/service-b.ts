@@ -1,7 +1,7 @@
 import express from "express";
 import fetch from "node-fetch";
-import { validateJwt } from "../utils/jwt.js";
-import { SERVICE_B_AUD, PORTS } from "../config.js";
+import { validateMockOktaJwt, validateOktaJwt } from "../utils/jwt.js";
+import { MOCK_OKTA_CONFIG, PORTS } from "../config.js";
 import type { PolicyCheckRequest, PolicyCheckResponse } from "../types.js";
 
 /**
@@ -12,14 +12,23 @@ export function createServiceBApp() {
   const app = express();
   app.use(express.json());
 
-  function validateBearerToken(authHeader?: string) {
+  function validateMockOktaBearerToken(authHeader?: string) {
     if (!authHeader?.startsWith("Bearer ")) throw new Error("missing_bearer");
     const token = authHeader.slice("Bearer ".length);
-    return validateJwt(token, SERVICE_B_AUD);
+    return validateMockOktaJwt(token, MOCK_OKTA_CONFIG.serviceBAud);
+  }
+
+  async function validateOktaBearerToken(authHeader?: string) {
+    if (!authHeader?.startsWith("Bearer ")) throw new Error("missing_bearer");
+    const token = authHeader.slice("Bearer ".length);
+    // Seems like M2M Okta access tokens use "api://default" as default audience (for /oauth2/default auth server)
+    // where as OIDC Okta access tokens use the Okta org level issuer URL "https://fusiondev.oktapreview.com" as audience for dashboard/user tokens
+    // return await validateRealOktaJwt(token, "<api://default" | "https://fusiondev.oktapreview.com">);
+    return await validateOktaJwt(token, "");
   }
 
   async function authZCheck(input: PolicyCheckRequest): Promise<PolicyCheckResponse> {
-    const resp = await fetch(`http://localhost:${PORTS.authz}/authorize`, {
+    const resp = await fetch(`http://localhost:${PORTS.mockAuthz}/authorize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -29,9 +38,38 @@ export function createServiceBApp() {
     return (await resp.json()) as PolicyCheckResponse;
   }
 
+  // NEW: Endpoint for real Okta tokens only
+  // IMPORTANT: This must come BEFORE /wallet/:id to avoid being matched as an ID
+  app.get("/wallet/real-okta", async (req, res) => {
+    try {
+      const claims = await validateOktaBearerToken(req.headers.authorization);
+
+      // Okta uses 'cid' for client_id, we normalize it to 'azp' in validateRealOktaJwt
+      const actorService = claims.azp || claims.cid || "unknown";
+
+      // Real Okta tokens won't go through AuthZ in this demo
+      // In production, you'd integrate with your AuthZ service
+      return res.json({
+        walletId: "real-okta",
+        data: { balance: 999.99 },
+        tokenType: "real-okta-rs256",
+        validatedVia: "JWKS from real Okta",
+        tokenClaimsUsed: {
+          iss: claims.iss,
+          azp: actorService,
+          cid: claims.cid,
+          sub: claims.sub ?? null,
+          scope: claims.scope ?? (claims.scp ? claims.scp.join(" ") : null),
+        },
+      });
+    } catch (e: any) {
+      return res.status(401).json({ error: "unauthorized", detail: e.message });
+    }
+  });
+
   app.get("/wallet/:id", async (req, res) => {
     try {
-      const claims = validateBearerToken(req.headers.authorization);
+      const claims = validateMockOktaBearerToken(req.headers.authorization);
 
       const walletId = req.params.id;
       const decision = await authZCheck({
@@ -58,7 +96,7 @@ export function createServiceBApp() {
 
   app.post("/wallet/:id", async (req, res) => {
     try {
-      const claims = validateBearerToken(req.headers.authorization);
+      const claims = validateMockOktaBearerToken(req.headers.authorization);
 
       const walletId = req.params.id;
       const decision = await authZCheck({

@@ -27,10 +27,18 @@ export type PolicyCheckResponse = {
 export type JwtClaims = {
   iss: string;
   aud: string;
-  azp: string;
+  azp: string; // Standard OIDC claim (normalized from 'cid' for Okta)
   sub?: string;
-  scope?: string;
+  scope?: string; // Standard OIDC - space-separated string
   iat: number;
   exp: number;
   jti: string;
+
+  // Okta-specific claims (client credentials flow)
+  cid?: string; // Okta's client_id claim (normalized to 'azp')
+  scp?: string[]; // Okta's scopes as array (e.g., ["scope1", "scope2"])
+
+  // Other possible claims
+  client_id?: string; // Some IdPs use this
+  ver?: number; // Okta token version
 };

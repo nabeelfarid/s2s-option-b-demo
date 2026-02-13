@@ -1,5 +1,5 @@
 import express from "express";
-import { issueJwt } from "../utils/jwt.js";
+import { issueMockOktaJwt } from "../utils/jwt.js";
 import type { TokenRequest } from "../types.js";
 
 /**
@@ -29,7 +29,7 @@ export function createMockOktaApp() {
       return res.status(400).json({ error: "missing_audience" });
     }
 
-    const access_token = issueJwt(body);
+    const access_token = issueMockOktaJwt(body);
 
     return res.json({
       token_type: "Bearer",
