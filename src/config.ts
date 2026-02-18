@@ -14,7 +14,6 @@ export const OKTA_CONFIG = {
   // Service A client credentials
   serviceAClientId: process.env.SERVICE_A_OKTA_CLIENT_ID || "",
   serviceAClientSecret: process.env.SERVICE_A_OKTA_CLIENT_SECRET || "",
-  serviceAScope: process.env.SERVICE_A_OKTA_SCOPE || "",
   // Custom authorization server (for API tokens)
   issuer: `https://${process.env.OKTA_DOMAIN}/oauth2/default`,
   tokenUrl: `https://${process.env.OKTA_DOMAIN}/oauth2/default/v1/token`,
@@ -22,6 +21,10 @@ export const OKTA_CONFIG = {
   // Org-level authorization server (for dashboard/internal tokens)
   orgIssuer: `https://${process.env.OKTA_DOMAIN}`,
   orgJwksUrl: `https://${process.env.OKTA_DOMAIN}/oauth2/v1/keys`,
+  orgTokenUrl: `https://${process.env.OKTA_DOMAIN}/oauth2/v1/token`,
+
+  defaultAudience: process.env.DEFAULT_AUDIENCE || "",
+  defaultScope: process.env.DEFAULT_SCOPE || "",
 }
 
 export const PORTS = {

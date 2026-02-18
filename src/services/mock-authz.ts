@@ -1,5 +1,5 @@
 import express from "express";
-import type { PolicyCheckRequest } from "../types.js";
+import type { PolicyCheckRequest } from "../types";
 
 /**
  * Mock Authorization Service (Policy Engine)

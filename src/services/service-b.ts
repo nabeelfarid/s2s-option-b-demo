@@ -1,8 +1,9 @@
 import express from "express";
 import fetch from "node-fetch";
-import { validateMockOktaJwt, validateOktaJwt } from "../utils/jwt.js";
-import { MOCK_OKTA_CONFIG, PORTS } from "../config.js";
-import type { PolicyCheckRequest, PolicyCheckResponse } from "../types.js";
+import { extractBearerToken } from "../utils/auth";
+import { validateMockOktaJwt, validateOktaJwt } from "../utils/jwt";
+import { MOCK_OKTA_CONFIG, PORTS } from "../config";
+import type { PolicyCheckRequest, PolicyCheckResponse } from "../types";
 
 /**
  * Service B (API being called)
@@ -13,14 +14,14 @@ export function createServiceBApp() {
   app.use(express.json());
 
   function validateMockOktaBearerToken(authHeader?: string) {
-    if (!authHeader?.startsWith("Bearer ")) throw new Error("missing_bearer");
-    const token = authHeader.slice("Bearer ".length);
+    const token = extractBearerToken(authHeader);
+    if (!token) throw new Error("missing_bearer");
     return validateMockOktaJwt(token, MOCK_OKTA_CONFIG.serviceBAud);
   }
 
   async function validateOktaBearerToken(authHeader?: string) {
-    if (!authHeader?.startsWith("Bearer ")) throw new Error("missing_bearer");
-    const token = authHeader.slice("Bearer ".length);
+    const token = extractBearerToken(authHeader);
+    if (!token) throw new Error("missing_bearer");
     // Seems like M2M Okta access tokens use "api://default" as default audience (for /oauth2/default auth server)
     // where as OIDC Okta access tokens use the Okta org level issuer URL "https://fusiondev.oktapreview.com" as audience for dashboard/user tokens
     // return await validateRealOktaJwt(token, "<api://default" | "https://fusiondev.oktapreview.com">);

@@ -1,8 +1,15 @@
 import { createHash } from "crypto";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import * as jose from "jose";
-import { OKTA_CONFIG, MOCK_OKTA_CONFIG } from "../config.js";
-import type { JwtClaims, TokenRequest } from "../types.js";
+import { Agent, fetch as undiciFetch } from "undici";
+import { OKTA_CONFIG, MOCK_OKTA_CONFIG } from "../config";
+import type { JwtClaims, TokenRequest } from "../types";
+
+// DEVELOPMENT ONLY: Disable certificate validation for Okta preview environments
+// DO NOT use in production!
+const httpsDispatcher = new Agent({
+  connect: { rejectUnauthorized: false },
+});
 
 function nowSeconds() {
   return Math.floor(Date.now() / 1000);
@@ -51,7 +58,7 @@ export function validateMockOktaJwt(token: string, expectedAudience: string): Jw
  * Validate RS256 JWT from real Okta using JWKS
  * Supports both custom authorization server and org-level tokens
  */
-export async function validateOktaJwt(token: string, expectedAudience: string): Promise<JwtClaims> {
+export async function validateOktaJwt(token: string, expectedAudience?: string): Promise<JwtClaims> {
   // Decode token without verification to check the issuer
   const decoded = jwt.decode(token, { complete: true }) as any;
   const tokenIssuer = decoded?.payload?.iss;
@@ -60,9 +67,14 @@ export async function validateOktaJwt(token: string, expectedAudience: string): 
     // Determine which JWKS and issuer to use based on the token's issuer
     const isOrgToken = tokenIssuer === OKTA_CONFIG.orgIssuer;
     const jwksUrl = isOrgToken ? OKTA_CONFIG.orgJwksUrl : OKTA_CONFIG.jwksUrl;
+    console.log("jwksUrl", jwksUrl);
     const expectedIssuer = isOrgToken ? OKTA_CONFIG.orgIssuer : OKTA_CONFIG.issuer;
 
-    const JWKS = jose.createRemoteJWKSet(new URL(jwksUrl));
+    const JWKS = jose.createRemoteJWKSet(new URL(jwksUrl), {
+      // @ts-expect-error - fetch-like modules have incompatible Response typings per jose docs
+      [jose.customFetch]: (url, opts) =>
+        undiciFetch(url, { ...opts, dispatcher: httpsDispatcher }),
+    });
 
     const { payload } = await jose.jwtVerify(token, JWKS, {
       /*
@@ -71,7 +83,7 @@ export async function validateOktaJwt(token: string, expectedAudience: string): 
         See READEME.md for more details.
       */
       // issuer: expectedIssuer,
-      // audience: expectedAudience,
+      ...(expectedAudience && { audience: expectedAudience }),
     });
 
     console.dir(payload, { depth: null });

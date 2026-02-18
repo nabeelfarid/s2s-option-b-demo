@@ -1,6 +1,6 @@
 import express from "express";
-import { issueMockOktaJwt } from "../utils/jwt.js";
-import type { TokenRequest } from "../types.js";
+import { issueMockOktaJwt } from "../utils/jwt";
+import type { TokenRequest } from "../types";
 
 /**
  * Mock Okta (IdP)

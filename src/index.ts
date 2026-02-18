@@ -1,9 +1,9 @@
 import "dotenv/config";
-import { PORTS } from "./config.js";
-import { createMockOktaApp } from "./services/mock-okta.js";
-import { createMockAuthZApp } from "./services/mock-authz.js";
-import { createServiceBApp } from "./services/service-b.js";
-import { createServiceAApp } from "./services/service-a.js";
+import { PORTS } from "./config";
+import { createMockOktaApp } from "./services/mock-okta";
+import { createMockAuthZApp } from "./services/mock-authz";
+import { createServiceBApp } from "./services/service-b";
+import { createServiceAApp } from "./services/service-a";
 
 /**
  * SIMPLE LOCAL DEMO - Option B Architecture
@@ -40,8 +40,11 @@ async function main() {
   console.log("\n=== Real Okta Scenarios ===");
   console.log(`  # M2M (no user context):`);
   console.log(`  curl http://localhost:${PORTS.serviceA}/demo/read-without-user-context-using-real-okta`);
-  console.log(`\n  # With user context (requires user token):`);
+  console.log(`\n  # With user context - Token Forwarding (requires user token):`);
   console.log(`  curl http://localhost:${PORTS.serviceA}/demo/read-with-user-context-using-real-okta \\`);
+  console.log(`    -H "Authorization: Bearer <your-user-token>"`);
+  console.log(`\n  # With user context - OBO Token Exchange (requires user token):`);
+  console.log(`  curl http://localhost:${PORTS.serviceA}/demo/read-with-user-context-using-obo-real-okta \\`);
   console.log(`    -H "Authorization: Bearer <your-user-token>"`);
 }
 
